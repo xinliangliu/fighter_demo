@@ -19,7 +19,6 @@ int WINAPI Init(HWND);
 int WINAPI Release(HWND);
 int WINAPI Paint();
 int WINAPI PaintBack();
-int WINAPI PaintDemo();
 
 int WINAPI LG2DC(Point *);
 int WINAPI DC2LG(Point *);
@@ -33,7 +32,7 @@ HDC 		hDC;
 HDC 		memDC;
 HBITMAP 	bmpBack;
 WORD		order;
-CHAR		flag;
+HBITMAP		man[2];
 
 int WINAPI
 Init(HWND hwnd)
@@ -42,9 +41,12 @@ Init(HWND hwnd)
 	memDC = CreateCompatibleDC(hDC);
 	bmpBack = CreateCompatibleBitmap(hDC, CANVASSIDELENGTH, CANVASSIDELENGTH);
 	order = 0;
-	flag = 0;
+	man[0] = (HBITMAP)LoadImage(NULL, "000.bmp", IMAGE_BITMAP, 100, 100, LR_LOADFROMFILE);
+	man[1] = (HBITMAP)LoadImage(NULL, "001.bmp", IMAGE_BITMAP, 100, 100, LR_LOADFROMFILE);
 	
-	SelectObject(memDC,bmpBack);
+	SetTimer(hwnd, 1, 100, NULL);
+	
+	SelectObject(memDC, bmpBack);
 	return TRUE;
 }
 
@@ -52,6 +54,8 @@ int WINAPI
 Release(HWND hwnd)
 {	
 	DeleteObject(bmpBack);
+	DeleteObject(man[0]);
+	DeleteObject(man[1]);
 	DeleteDC(memDC);
 	ReleaseDC(hwnd, hDC);
 	
@@ -61,7 +65,22 @@ Release(HWND hwnd)
 int WINAPI
 Paint()
 {
+	SelectObject(memDC, bmpBack);
 	BitBlt(hDC, 0, 0, CANVASSIDELENGTH, CANVASSIDELENGTH, memDC, 0, 0, SRCCOPY);
+	
+	SelectObject(memDC, man[order]);
+//	BitBlt(hDC, 0, 0, CANVASSIDELENGTH, CANVASSIDELENGTH, memDC, -30, -30, SRCCOPY);
+	TransparentBlt(hDC, 30, 30, 100, 100, memDC, 0, 0, 100, 100, RGB(255,255,255));
+	
+	if(order >= 1)
+	{
+		order = 0;
+	}
+	else
+	{
+		order++;
+	}
+	
 	return TRUE;
 }
 
@@ -192,35 +211,6 @@ PaintBack()
 	return TRUE;
 }
 
-int WINAPI
-PaintDemo()
-{
-	HBRUSH 	brush;
-	Point 	psrc;
-	Point 	pdst;
-	
-	if(flag) brush = CreateSolidBrush(RGB(255, 255, 255));
-	else brush = CreateSolidBrush(RGB(255, 255, 0));
-	
-	psrc.x = (order / 4) * (RESOLUTIONSIZE / DOTSPLITNUM) + 1;
-	psrc.y = (order % 4 + 1) * (RESOLUTIONSIZE / DOTSPLITNUM) - 2;
-	pdst.x = (order / 4 + 1) * (RESOLUTIONSIZE / DOTSPLITNUM) - 2;
-	pdst.y = (order % 4) * (RESOLUTIONSIZE / DOTSPLITNUM) + 1;
-	FillRectangle(memDC, psrc, pdst, brush);
-	
-	if(order >= 15)
-	{
-		order = 0;
-		flag = flag > 0 ? 0 : 1;
-	}
-	else
-	{
-		order++;
-	}
-	
-	return TRUE;
-}
-
 LRESULT CALLBACK 
 WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -235,7 +225,6 @@ WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 			PaintBack();
 			break;
 		case WM_TIMER:
-			PaintDemo();
 			Paint();
 			break;
 		default:
@@ -288,7 +277,6 @@ WinMain(HINSTANCE hInstance,
 
 	ShowWindow(hwnd, iCmdShow);
 	UpdateWindow(hwnd);
-	SetTimer(hwnd, 1, 100, NULL);
 	
 	MSG msg = {0};
 	while(TRUE)
