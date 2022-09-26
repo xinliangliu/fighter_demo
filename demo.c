@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 #define MULTIPLIER				1
-#define	RESOLUTIONSIZE				0x0100
+#define	RESOLUTIONSIZE			0x0100
 #define COORDINATESIDELENGTH	(RESOLUTIONSIZE * MULTIPLIER)
 #define CANVASSIDELENGTH		((RESOLUTIONSIZE + 0x40) * MULTIPLIER)
 #define ORIGINSIDELENGTH		16
@@ -34,7 +34,7 @@ HDC 		memDC;
 HDC 		manDC;
 HBITMAP 	bmpBack;
 WORD		order;
-HBITMAP		man[2];
+HBITMAP		man;
 
 int WINAPI
 Init(HWND hwnd)
@@ -44,8 +44,7 @@ Init(HWND hwnd)
 	bmpBack = CreateCompatibleBitmap(hDC, CANVASSIDELENGTH, CANVASSIDELENGTH);
 	order = 0;
 	manDC = CreateCompatibleDC(hDC);
-	man[0] = (HBITMAP)LoadImage(NULL, "000.bmp", IMAGE_BITMAP, 100, 100, LR_LOADFROMFILE);
-	man[1] = (HBITMAP)LoadImage(NULL, "001.bmp", IMAGE_BITMAP, 100, 100, LR_LOADFROMFILE);
+	man = (HBITMAP)LoadImage(NULL, "all.dz", IMAGE_BITMAP, 200, 100, LR_LOADFROMFILE);
 	
 	SetTimer(hwnd, 1, 100, NULL);
 	
@@ -57,8 +56,7 @@ int WINAPI
 Release(HWND hwnd)
 {	
 	DeleteObject(bmpBack);
-	DeleteObject(man[0]);
-	DeleteObject(man[1]);
+	DeleteObject(man);
 	DeleteDC(memDC);
 	DeleteDC(manDC);
 	ReleaseDC(hwnd, hDC);
@@ -70,6 +68,11 @@ int WINAPI
 Paint()
 {
 	BitBlt(hDC, 0, 0, CANVASSIDELENGTH, CANVASSIDELENGTH, memDC, 0, 0, SRCCOPY);
+	
+	SelectObject(manDC, man);
+	TransparentBlt(hDC, 30, 30, 100, 100, manDC, order * 100, 0, 100, 100, RGB(255,255,255));
+	PaintDemo();
+	
 	return TRUE;
 }
 
@@ -203,9 +206,6 @@ PaintBack()
 int WINAPI
 PaintDemo()
 {
-	SelectObject(manDC, man[order]);
-	TransparentBlt(memDC, 30, 30, 100, 100, manDC, 0, 0, 100, 100, RGB(255,255,255));
-	
 	if(order >= 1)
 	{
 		order = 0;
@@ -232,8 +232,6 @@ WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 			PaintBack();
 			break;
 		case WM_TIMER:
-			PaintBack();
-			PaintDemo();
 			Paint();
 			break;
 		default:
@@ -273,7 +271,7 @@ WinMain(HINSTANCE hInstance,
 	
 	HWND hwnd;
 	hwnd = CreateWindow(szClassName,
-						TEXT ("Leukocyte Clustering & Classification"),
+						TEXT ("Animation Demo"),
 						WS_OVERLAPPEDWINDOW,
 						ORIGINSIDELENGTH,
 						ORIGINSIDELENGTH,
