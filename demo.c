@@ -32,8 +32,6 @@ TCHAR szClassName[] = TEXT("LCC");
 HDC 		hDC;
 HDC 		memDC;
 HBITMAP 	bmpBack;
-DWORD		preTime;
-DWORD		curTime;
 WORD		order;
 CHAR		flag;
 
@@ -43,7 +41,6 @@ Init(HWND hwnd)
 	hDC = GetDC(hwnd);
 	memDC = CreateCompatibleDC(hDC);
 	bmpBack = CreateCompatibleBitmap(hDC, CANVASSIDELENGTH, CANVASSIDELENGTH);
-	curTime = preTime = GetTickCount();
 	order = 0;
 	flag = 0;
 	
@@ -65,7 +62,6 @@ int WINAPI
 Paint()
 {
 	BitBlt(hDC, 0, 0, CANVASSIDELENGTH, CANVASSIDELENGTH, memDC, 0, 0, SRCCOPY);
-	preTime = GetTickCount();
 	return TRUE;
 }
 
@@ -238,6 +234,10 @@ WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 			Init(hwnd);
 			PaintBack();
 			break;
+		case WM_TIMER:
+			PaintDemo();
+			Paint();
+			break;
 		default:
 			return DefWindowProc (hwnd, message, wParam, lParam);
 	}
@@ -288,6 +288,7 @@ WinMain(HINSTANCE hInstance,
 
 	ShowWindow(hwnd, iCmdShow);
 	UpdateWindow(hwnd);
+	SetTimer(hwnd, 1, 100, NULL);
 	
 	MSG msg = {0};
 	while(TRUE)
@@ -297,15 +298,6 @@ WinMain(HINSTANCE hInstance,
 			if(msg.message == WM_QUIT) break;
             TranslateMessage(&msg);
             DispatchMessage(&msg);
-        }
-        else
-        {
-			curTime = GetTickCount();
-			if (curTime - preTime > 50)
-			{
-				PaintDemo();
-				Paint();
-			}
         }
     }
 	
