@@ -7,22 +7,34 @@
 #define CANVASSIDELENGTH		((RESOLUTIONSIZE + 0x40) * MULTIPLIER)
 #define ORIGINSIDELENGTH		16
 #define DOTSPLITNUM				4
-#define DZLOOPNUM				3
+#define DZLOOPNUM				9
+
+#define	STAY	(0x0)
+#define	JUMP	(0x80)
+#define	SQUAT	(0x40)
+#define RETREAT	(0x20)
+#define ADVANCE	(0x10)
+
+#define JUMPRETREAT	(JUMP | RETREAT)
+#define JUMPADVANCE	(JUMP | ADVANCE)
 
 typedef struct tagPoint
 {
-	INT x;
-	INT y;
+	int x;
+	int y;
 } Point;
 
-enum Mode
+typedef struct tagAction
 {
-	MODE_NULL = -1,
-	MODE_STAY,
-	MODE_PUNCH,
-	MODE_KICK,
-	MODE_END
-};
+	unsigned char id;
+	unsigned char action;
+} Action;
+				
+typedef struct tagModeFrame
+{
+	unsigned char mode;
+	unsigned char len;
+} ModeFrame;
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 int WINAPI Init(HWND);
@@ -30,6 +42,7 @@ int WINAPI Release(HWND);
 int WINAPI Paint();
 int WINAPI PaintBack();
 int WINAPI PaintDemo();
+int WINAPI ChangeFrameLocation();
 
 int WINAPI LG2DC(Point *);
 int WINAPI DC2LG(Point *);
@@ -37,17 +50,51 @@ int WINAPI DrawRectangle(HDC, Point, Point);
 int WINAPI FillRectangle(HDC, Point, Point, HBRUSH);
 int WINAPI DrawScatter(HDC, Point, int, HBRUSH);
 int WINAPI DrawLine(HDC, Point, Point);
+int WINAPI GetAction(unsigned char, unsigned char *);
+int WINAPI GetModeID(unsigned char, unsigned char *);
 
 TCHAR szClassName[] = TEXT("LCC");
 HDC 		hDC;
 HDC 		memDC;
 HDC 		manDC;
 HBITMAP 	bmpBack;
-WORD		order;
 BOOL		init;
-BOOL		keyvalid;
-enum Mode	mode[2];
 HBITMAP		man;
+
+unsigned char	curmode;
+unsigned char	nextmode;
+unsigned char	action;
+unsigned char	modeid;
+unsigned char	curmodeid;
+unsigned char	nextmodeid;
+unsigned char	mv;
+
+int		maxloc[4];
+int		curloc[2];
+
+Action act[] = {{'W', JUMP},
+				{'S', SQUAT},
+				{'A', RETREAT},
+				{'D', ADVANCE},
+				{0x0, STAY}};
+
+ModeFrame mf[] = {{JUMP,	8},
+				  {SQUAT,	5},
+				  {RETREAT,	3},
+				  {ADVANCE,	3},
+				  {JUMPRETREAT,	8},
+				  {JUMPADVANCE,	8},
+				  {STAY,	3},
+				  {0xFF,	0}};
+				  
+Point shift[][DZLOOPNUM] = 
+				{{{0, -40}, {0, -30}, {0, -20}, {0, -10}, {0, 10}, {0, 20}, {0, 30}, {0, 40}},
+				 {{0, 20}, {0, 25}, {0, 0}, {0, 0}, {0, -45}},
+				 {{-10, 0}, {-10, 0}, {-10, 0}},
+				 {{10, 0}, {10, 0}, {10, 0}},
+				 {{-10, -40}, {-10, -30}, {-10, -20}, {-10, -10}, {-10, 10}, {-10, 20}, {-10, 30}, {-10, 40}},
+				 {{10, -40}, {10, -30}, {10, -20}, {10, -10}, {10, 10}, {10, 20}, {10, 30}, {10, 40}},
+				 {{0, 0}, {0, 0}, {0, 0}}};
 
 int WINAPI
 Init(HWND hwnd)
@@ -55,14 +102,24 @@ Init(HWND hwnd)
 	hDC = GetDC(hwnd);
 	memDC = CreateCompatibleDC(hDC);
 	bmpBack = CreateCompatibleBitmap(hDC, CANVASSIDELENGTH, CANVASSIDELENGTH);
-	order = 0;
 	init = TRUE;
-	keyvalid = TRUE;
-	mode[0] = mode[1] = MODE_STAY;
+	curmode = 0;
+	nextmode = 0;
+	action = STAY;
+	modeid = 0;
+	curmodeid = 6;
+	nextmodeid = 6;
+	mv = 0;
+	maxloc[0] = -100;
+	maxloc[1] = 86;
+	maxloc[2] = -1000;
+	maxloc[3] = 0;
+	curloc[0] = 0;
+	curloc[1] = 0;
 	manDC = CreateCompatibleDC(hDC);
-	man = (HBITMAP)LoadImage(NULL, "all.dz", IMAGE_BITMAP, DZLOOPNUM * 100, MODE_END * 100, LR_LOADFROMFILE);
+	man = (HBITMAP)LoadImage(NULL, "all.dz", IMAGE_BITMAP, DZLOOPNUM * 100, 7 * 100, LR_LOADFROMFILE);
 	
-	SetTimer(hwnd, 1, 100, NULL);
+	SetTimer(hwnd, 1, 40, NULL);
 	
 	SelectObject(memDC, bmpBack);
 	SelectObject(manDC, man);
@@ -227,18 +284,93 @@ PaintBack()
 }
 
 int WINAPI
+GetAction(unsigned char id, unsigned char *action)
+{
+	unsigned char i = 0;
+	
+	while(act[i].id != 0x0)
+	{
+		if (act[i].id == id)
+		{
+			*action = act[i].action;
+			return TRUE;
+		}
+		else i++;
+	}
+	
+	return FALSE;
+}
+
+int WINAPI
+GetModeID(unsigned char mode, unsigned char *modeid)
+{
+	unsigned char i = 0;
+	
+	while(mf[i].mode != 0xFF)
+	{
+		if (mf[i].mode == mode)
+		{
+			*modeid = i;
+			return TRUE;
+		}
+		else i++;
+	}
+	
+//	for compatibility
+	i = 0;
+	while(mf[i].mode != 0xFF)
+	{
+		if ((mf[i].mode & mode) == mf[i].mode)
+		{
+			*modeid = i;
+			return TRUE;
+		}
+		else i++;
+	}
+	
+	return FALSE;
+}
+
+int WINAPI
+ChangeFrameLocation()
+{
+	if (mv >= mf[curmodeid].len)
+	{
+		mv = 0;
+		curmode = mf[nextmodeid].mode;
+		curmodeid = nextmodeid;
+	}
+	
+	curloc[0] += shift[curmodeid][mv].x;
+	if (curloc[0] < maxloc[0]) curloc[0] = maxloc[0];
+	if (curloc[0] > maxloc[1]) curloc[0] = maxloc[1];
+	curloc[1] += shift[curmodeid][mv].y;
+	
+	return TRUE;
+}
+
+int WINAPI
 PaintDemo()
 {
-	TransparentBlt(hDC, 30, 30, 100, 100, manDC, order * 100, mode[1] * 100, 100, 100, RGB(255,255,255));
-	
-	order++;
-	order %= DZLOOPNUM;
-	
-	if (!order && mode[1])
+	int loc[2];
+	loc[0] = 0;
+	loc[0] = 0;
+	if (ChangeFrameLocation())
 	{
-		mode[0] = mode[1];
-		mode[1] = MODE_STAY;
+		loc[0] = curloc[0];
+		loc[1] = curloc[1];
+		if (curloc[1] < maxloc[2]) loc[1] = maxloc[2];
+		if (curloc[1] > maxloc[3]) loc[1] = maxloc[3];
 	}
+	
+	TransparentBlt(hDC, 100 + loc[0], 150 + loc[1], 100, 100, manDC, mv * 100, curmodeid * 100, 100, 100, RGB(255,255,255));
+	
+	if ((curmode & SQUAT) == SQUAT &&
+		mv == 3)
+	{
+		mv--;
+	}
+	else mv++;
 	
 	return TRUE;
 }
@@ -259,36 +391,58 @@ WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 			Paint();
 			break;
 		case WM_KEYDOWN:
-			printf("down - %x\n", (unsigned int)wParam);
-			fflush(stdout);
-			if (wParam == 0x4A && !mode[1] && keyvalid)
+//			printf("down - %x\n", (unsigned int)wParam);
+//			fflush(stdout);
+			
+			if (GetAction(wParam, &action))
 			{
-				mode[0] = mode[1];
-				mode[1] = MODE_PUNCH;
-				order = 0;
-				keyvalid = FALSE;
+				if (GetModeID(nextmode | action, &modeid))
+				{
+					nextmode |= action;
+					nextmodeid = modeid;
+					
+					if (curloc[1] == 0	&&
+						curmodeid != nextmodeid)
+					{
+						curmode = mf[nextmodeid].mode;
+						curmodeid = nextmodeid;
+						mv = 0;
+					}
+				}
 			}
-			else
-			if (wParam == 0x4B && !mode[1] && keyvalid)
-			{
-				mode[0] = mode[1];
-				mode[1] = MODE_KICK;
-				order = 0;
-				keyvalid = FALSE;
-			}
+			
 			break;
 		case WM_KEYUP:
-			printf("up - %x\n", (unsigned int)wParam);
-			fflush(stdout);
-			if (wParam == 0x4A)
+//			printf("up - %x\n", (unsigned int)wParam);
+//			fflush(stdout);
+			
+			if (GetAction(wParam, &action))
 			{
-				keyvalid = TRUE;
+				if (GetModeID(nextmode & (~action), &modeid))
+				{
+					nextmode &= ~action;
+					nextmodeid = modeid;
+					
+					if (curloc[1] == 0	&&
+						curmodeid != nextmodeid)
+					{
+						curmode = mf[nextmodeid].mode;
+						curmodeid = nextmodeid;
+						mv = 0;
+					}
+					else
+					if (action == SQUAT	&&
+						(curmode ^ nextmode) & SQUAT)
+					{
+						if (mv == 1)
+						{
+							curloc[1] += shift[curmodeid][mv].y;
+						}
+						mv = 4;
+					}
+				}
 			}
-			else
-			if (wParam == 0x4B)
-			{
-				keyvalid = TRUE;
-			}
+			
 			break;
 		default:
 			return DefWindowProc (hwnd, message, wParam, lParam);
