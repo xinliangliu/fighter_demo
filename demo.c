@@ -19,6 +19,7 @@ int WINAPI Init(HWND);
 int WINAPI Release(HWND);
 int WINAPI Paint();
 int WINAPI PaintBack();
+int WINAPI PaintDemo();
 
 int WINAPI LG2DC(Point *);
 int WINAPI DC2LG(Point *);
@@ -30,6 +31,7 @@ int WINAPI DrawLine(HDC, Point, Point);
 TCHAR szClassName[] = TEXT("LCC");
 HDC 		hDC;
 HDC 		memDC;
+HDC 		manDC;
 HBITMAP 	bmpBack;
 WORD		order;
 HBITMAP		man[2];
@@ -41,6 +43,7 @@ Init(HWND hwnd)
 	memDC = CreateCompatibleDC(hDC);
 	bmpBack = CreateCompatibleBitmap(hDC, CANVASSIDELENGTH, CANVASSIDELENGTH);
 	order = 0;
+	manDC = CreateCompatibleDC(hDC);
 	man[0] = (HBITMAP)LoadImage(NULL, "000.bmp", IMAGE_BITMAP, 100, 100, LR_LOADFROMFILE);
 	man[1] = (HBITMAP)LoadImage(NULL, "001.bmp", IMAGE_BITMAP, 100, 100, LR_LOADFROMFILE);
 	
@@ -57,6 +60,7 @@ Release(HWND hwnd)
 	DeleteObject(man[0]);
 	DeleteObject(man[1]);
 	DeleteDC(memDC);
+	DeleteDC(manDC);
 	ReleaseDC(hwnd, hDC);
 	
 	return TRUE;
@@ -65,22 +69,7 @@ Release(HWND hwnd)
 int WINAPI
 Paint()
 {
-	SelectObject(memDC, bmpBack);
 	BitBlt(hDC, 0, 0, CANVASSIDELENGTH, CANVASSIDELENGTH, memDC, 0, 0, SRCCOPY);
-	
-	SelectObject(memDC, man[order]);
-//	BitBlt(hDC, 0, 0, CANVASSIDELENGTH, CANVASSIDELENGTH, memDC, -30, -30, SRCCOPY);
-	TransparentBlt(hDC, 30, 30, 100, 100, memDC, 0, 0, 100, 100, RGB(255,255,255));
-	
-	if(order >= 1)
-	{
-		order = 0;
-	}
-	else
-	{
-		order++;
-	}
-	
 	return TRUE;
 }
 
@@ -211,6 +200,24 @@ PaintBack()
 	return TRUE;
 }
 
+int WINAPI
+PaintDemo()
+{
+	SelectObject(manDC, man[order]);
+	TransparentBlt(memDC, 30, 30, 100, 100, manDC, 0, 0, 100, 100, RGB(255,255,255));
+	
+	if(order >= 1)
+	{
+		order = 0;
+	}
+	else
+	{
+		order++;
+	}
+	
+	return TRUE;
+}
+
 LRESULT CALLBACK 
 WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -225,6 +232,8 @@ WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 			PaintBack();
 			break;
 		case WM_TIMER:
+			PaintBack();
+			PaintDemo();
 			Paint();
 			break;
 		default:
