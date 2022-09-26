@@ -7,12 +7,22 @@
 #define CANVASSIDELENGTH		((RESOLUTIONSIZE + 0x40) * MULTIPLIER)
 #define ORIGINSIDELENGTH		16
 #define DOTSPLITNUM				4
+#define DZLOOPNUM				3
 
 typedef struct tagPoint
 {
 	INT x;
 	INT y;
 } Point;
+
+enum Mode
+{
+	MODE_NULL = -1,
+	MODE_STAY,
+	MODE_PUNCH,
+	MODE_KICK,
+	MODE_END
+};
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 int WINAPI Init(HWND);
@@ -34,6 +44,9 @@ HDC 		memDC;
 HDC 		manDC;
 HBITMAP 	bmpBack;
 WORD		order;
+BOOL		init;
+BOOL		keyvalid;
+enum Mode	mode[2];
 HBITMAP		man;
 
 int WINAPI
@@ -43,12 +56,16 @@ Init(HWND hwnd)
 	memDC = CreateCompatibleDC(hDC);
 	bmpBack = CreateCompatibleBitmap(hDC, CANVASSIDELENGTH, CANVASSIDELENGTH);
 	order = 0;
+	init = TRUE;
+	keyvalid = TRUE;
+	mode[0] = mode[1] = MODE_STAY;
 	manDC = CreateCompatibleDC(hDC);
-	man = (HBITMAP)LoadImage(NULL, "all.dz", IMAGE_BITMAP, 200, 100, LR_LOADFROMFILE);
+	man = (HBITMAP)LoadImage(NULL, "all.dz", IMAGE_BITMAP, DZLOOPNUM * 100, MODE_END * 100, LR_LOADFROMFILE);
 	
 	SetTimer(hwnd, 1, 100, NULL);
 	
 	SelectObject(memDC, bmpBack);
+	SelectObject(manDC, man);
 	return TRUE;
 }
 
@@ -61,16 +78,15 @@ Release(HWND hwnd)
 	DeleteDC(manDC);
 	ReleaseDC(hwnd, hDC);
 	
+	KillTimer(hwnd, 1);
+	
 	return TRUE;
 }
 
 int WINAPI
 Paint()
 {
-	BitBlt(hDC, 0, 0, CANVASSIDELENGTH, CANVASSIDELENGTH, memDC, 0, 0, SRCCOPY);
-	
-	SelectObject(manDC, man);
-	TransparentBlt(hDC, 30, 30, 100, 100, manDC, order * 100, 0, 100, 100, RGB(255,255,255));
+	PaintBack();
 	PaintDemo();
 	
 	return TRUE;
@@ -161,44 +177,51 @@ PaintBack()
 	Point		psrc, pdst;
 	int 		i;
 	
-	penBackSolidBlack = CreatePen(PS_SOLID, 3, RGB(0,0,0));
-	penBackDotBlack = CreatePen(PS_DOT, 1, RGB(0,0,0));
-	brushBack = CreateSolidBrush(RGB(255, 255, 255));
-	
-	rcClient.left = 0;
-	rcClient.top = 0;
-	rcClient.right = CANVASSIDELENGTH;
-	rcClient.bottom = CANVASSIDELENGTH;
-    FillRect(memDC, &rcClient, brushBack);
-	
-    SelectObject(memDC,penBackSolidBlack);
-	psrc.x = 0;
-	psrc.y = 0;
-	pdst.x = RESOLUTIONSIZE - 1;
-	pdst.y = RESOLUTIONSIZE - 1;
-	DrawRectangle(memDC, psrc, pdst);
-	
-	SelectObject(memDC,penBackDotBlack);
-	for (i = RESOLUTIONSIZE / DOTSPLITNUM; i < RESOLUTIONSIZE; i += RESOLUTIONSIZE / DOTSPLITNUM)
+	if (init)
 	{
+		penBackSolidBlack = CreatePen(PS_SOLID, 3, RGB(0,0,0));
+		penBackDotBlack = CreatePen(PS_DOT, 1, RGB(0,0,0));
+		brushBack = CreateSolidBrush(RGB(255, 255, 255));
+		
+		rcClient.left = 0;
+		rcClient.top = 0;
+		rcClient.right = CANVASSIDELENGTH;
+		rcClient.bottom = CANVASSIDELENGTH;
+		FillRect(memDC, &rcClient, brushBack);
+		
+		SelectObject(memDC,penBackSolidBlack);
 		psrc.x = 0;
-		psrc.y = i;
-		pdst.x = RESOLUTIONSIZE - 1;
-		pdst.y = i;
-		
-		DrawLine(memDC, psrc, pdst);
-		
-		psrc.x = i;
 		psrc.y = 0;
-		pdst.x = i;
+		pdst.x = RESOLUTIONSIZE - 1;
 		pdst.y = RESOLUTIONSIZE - 1;
+		DrawRectangle(memDC, psrc, pdst);
 		
-		DrawLine(memDC, psrc, pdst);
+		SelectObject(memDC,penBackDotBlack);
+		for (i = RESOLUTIONSIZE / DOTSPLITNUM; i < RESOLUTIONSIZE; i += RESOLUTIONSIZE / DOTSPLITNUM)
+		{
+			psrc.x = 0;
+			psrc.y = i;
+			pdst.x = RESOLUTIONSIZE - 1;
+			pdst.y = i;
+			
+			DrawLine(memDC, psrc, pdst);
+			
+			psrc.x = i;
+			psrc.y = 0;
+			pdst.x = i;
+			pdst.y = RESOLUTIONSIZE - 1;
+			
+			DrawLine(memDC, psrc, pdst);
+		}
+		
+		DeleteObject(penBackSolidBlack);
+		DeleteObject(penBackDotBlack);
+		DeleteObject(brushBack);
+		
+		init = FALSE;
 	}
 	
-	DeleteObject(penBackSolidBlack);
-	DeleteObject(penBackDotBlack);
-	DeleteObject(brushBack);
+	BitBlt(hDC, 0, 0, CANVASSIDELENGTH, CANVASSIDELENGTH, memDC, 0, 0, SRCCOPY);
 	
 	return TRUE;
 }
@@ -206,13 +229,15 @@ PaintBack()
 int WINAPI
 PaintDemo()
 {
-	if(order >= 1)
+	TransparentBlt(hDC, 30, 30, 100, 100, manDC, order * 100, mode[1] * 100, 100, 100, RGB(255,255,255));
+	
+	order++;
+	order %= DZLOOPNUM;
+	
+	if (!order && mode[1])
 	{
-		order = 0;
-	}
-	else
-	{
-		order++;
+		mode[0] = mode[1];
+		mode[1] = MODE_STAY;
 	}
 	
 	return TRUE;
@@ -229,10 +254,41 @@ WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 			break;
 		case WM_CREATE:
 			Init(hwnd);
-			PaintBack();
 			break;
 		case WM_TIMER:
 			Paint();
+			break;
+		case WM_KEYDOWN:
+			printf("down - %x\n", (unsigned int)wParam);
+			fflush(stdout);
+			if (wParam == 0x4A && !mode[1] && keyvalid)
+			{
+				mode[0] = mode[1];
+				mode[1] = MODE_PUNCH;
+				order = 0;
+				keyvalid = FALSE;
+			}
+			else
+			if (wParam == 0x4B && !mode[1] && keyvalid)
+			{
+				mode[0] = mode[1];
+				mode[1] = MODE_KICK;
+				order = 0;
+				keyvalid = FALSE;
+			}
+			break;
+		case WM_KEYUP:
+			printf("up - %x\n", (unsigned int)wParam);
+			fflush(stdout);
+			if (wParam == 0x4A)
+			{
+				keyvalid = TRUE;
+			}
+			else
+			if (wParam == 0x4B)
+			{
+				keyvalid = TRUE;
+			}
 			break;
 		default:
 			return DefWindowProc (hwnd, message, wParam, lParam);
